@@ -37,25 +37,25 @@ termux-x11-desktop/
 
 ## Runtime State
 
-The original scripts use:
+The scripts use:
 
 `$HOME/.local/state/termux-desktop`
 
-This location stores desktop runtime state and logs. The scripts originate
-from an existing Termux installation and require portability testing
-before they can be considered a universal installer.
+This location stores desktop runtime state and logs.
 
-## Installation
+## Development Status
 
-Installation instructions will be added after dependencies and startup
-behavior have been verified on a clean Termux environment.
+The scripts originate from an existing Termux installation.
+Portability, installation, dependency verification, startup, and
+recovery behavior must be tested in a clean Termux environment
+before the project can be considered a universal installer.
 
 ## Security
 
-Review all source files before publishing. Never commit credentials,
-access tokens, private logs, PID files, or other sensitive information.
+Never commit credentials, private logs, PID files, or other sensitive
+runtime information.
 
-## Project Status
+## References
 
-Initial repository setup. Portability, installation, and recovery testing
-are pending.
+- Termux: https://github.com/termux/termux-app
+- Termux:X11: https://github.com/termux/termux-x11
