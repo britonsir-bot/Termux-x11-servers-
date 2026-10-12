@@ -1,0 +1,110 @@
+#!/data/data/com.termux/files/usr/bin/bash
+set -u
+
+STATE="$HOME/.local/state/termux-desktop"
+LOG="$STATE/desktop.log"
+PIDFILE="$STATE/xfce-supervisor.pid"
+WDPID="$STATE/desktop-watchdog.pid"
+WATCH="$STATE/desktop-watchdog.sh"
+STOP="$STATE/intentional-stop"
+
+mkdir -p "$STATE/runtime"
+touch "$LOG"
+log() { printf '[%s] %s\n' "$(date '+%F %T')" "$*" | tee -a "$LOG"; }
+
+alive_script() {
+    local p="${1:-}" pattern="$2" args
+    [[ "$p" =~ ^[0-9]+$ ]] || return 1
+    kill -0 "$p" 2>/dev/null || return 1
+    args="$(ps -p "$p" -o args= 2>/dev/null || true)"
+    [[ "$args" == *"$pattern"* ]]
+}
+
+case "${1:-start}" in
+status)
+    echo "===== DESKTOP STATUS ====="
+    if alive_script "$(cat "$PIDFILE" 2>/dev/null || true)" xfce-supervisor.sh; then
+        echo "Supervisor: running"
+    else
+        echo "Supervisor: stopped or stale PID"
+    fi
+    if alive_script "$(cat "$WDPID" 2>/dev/null || true)" desktop-watchdog.sh; then
+        echo "Watchdog: running"
+    else
+        echo "Watchdog: stopped or stale PID"
+    fi
+    [ -f "$STOP" ] && echo "Stop marker: present" || echo "Stop marker: absent"
+    DISPLAY=:0 xdpyinfo >/dev/null 2>&1 &&
+        echo "X11: responding" || echo "X11: unavailable"
+    pgrep -af 'xfce4-session|xfwm4|xfce4-panel|firefox|termux-x11' || true
+    echo
+    tail -n 30 "$LOG"
+    exit 0
+    ;;
+stop)
+    touch "$STOP"
+    WPID="$(cat "$WDPID" 2>/dev/null || true)"
+    if alive_script "$WPID" desktop-watchdog.sh; then
+        kill -TERM "$WPID" 2>/dev/null || true
+    fi
+    PID="$(cat "$PIDFILE" 2>/dev/null || true)"
+    if alive_script "$PID" xfce-supervisor.sh; then
+        kill -TERM "$PID" 2>/dev/null || true
+    fi
+    rm -f "$PIDFILE" "$WDPID"
+    log "Stop requested. Automatic recovery disabled until desktop start."
+    exit 0
+    ;;
+start) ;;
+*)
+    echo "Usage: desktop [start|status|stop]"
+    exit 2
+    ;;
+esac
+
+rm -f "$STOP"
+
+for cmd in termux-x11 xdpyinfo dbus-run-session xfce4-session; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        log "ERROR: Missing command: $cmd"
+        exit 1
+    fi
+done
+
+if command -v termux-wake-lock >/dev/null 2>&1; then
+    termux-wake-lock || true
+fi
+
+if ! DISPLAY=:0 xdpyinfo >/dev/null 2>&1; then
+    log "Starting Termux:X11."
+    termux-x11 :0 -ac >> "$LOG" 2>&1 &
+    READY=0
+    for i in $(seq 1 30); do
+        sleep 1
+        if DISPLAY=:0 xdpyinfo >/dev/null 2>&1; then
+            READY=1
+            break
+        fi
+    done
+    if [ "$READY" -ne 1 ]; then
+        log "ERROR: X11 is unavailable. Open the Termux:X11 app and retry."
+        exit 1
+    fi
+fi
+
+if ! alive_script "$(cat "$PIDFILE" 2>/dev/null || true)" xfce-supervisor.sh; then
+    rm -f "$PIDFILE"
+    nohup setsid bash "$STATE/xfce-supervisor.sh" \
+        </dev/null >> "$LOG" 2>&1 &
+    echo "$!" > "$PIDFILE"
+    log "Supervisor launch requested."
+fi
+
+if ! alive_script "$(cat "$WDPID" 2>/dev/null || true)" desktop-watchdog.sh; then
+    rm -f "$WDPID"
+    nohup setsid bash "$WATCH" </dev/null >> "$LOG" 2>&1 &
+    log "Watchdog launch requested."
+fi
+
+sleep 3
+"$HOME/bin/desktop" status

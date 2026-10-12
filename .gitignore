@@ -1,0 +1,11 @@
+*.log
+*.pid
+*.tmp
+*.bak
+*.backup
+*.swp
+.env
+.env.*
+!.env.example
+runtime/
+intentional-stop
